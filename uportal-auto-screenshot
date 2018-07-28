@@ -1,10 +1,68 @@
 #!/usr/bin/env node
 
+const Listr = require('listr');
+const puppeteer = require('puppeteer');
+const fs = require("fs");
+
 const [, , url, username, password] = process.argv;
 if (url === undefined ||
     username === undefined ||
     password === undefined) {
     console.log("uportal-auto-screenshot [url] [username] [password]");
 } else {
+    const getPortletsTask = new Listr([
+        {
+            title: 'Open browser',
+            task: async ctx => {
+                const browser = await puppeteer.launch();
+                ctx.browser = browser;
+            }
+        },
+        {
+            title: `Login as ${username}`,
+            task: async ctx => {
+                try {
+                    const page = await ctx.browser.newPage();
+                    const target = `${url}/Login?username=${username}&password=${password}`;
+                    console.log(target)
+                    await page.goto(target, { waitUntil: 'networkidle2' });
+                } catch (err) {
+                    throw err;
+                }
+            }
+        },
+        {
+            title: 'Fetch list of portlets',
+            task: async ctx => {
+                try {
+                    const page = await ctx.browser.newPage();
+                    page.on('response', async response => {
+                        try {
+                            ctx.portlets = await response.buffer()
+                        } catch (err) {
+                            throw err;
+                        }
+                    });
+                    const target = `${url}/api/marketplace/entries.json`;
+                    await page.goto(target, { waitUntil: 'networkidle2' });
+                } catch(err) {
+                    throw err;
+                }
+            }
+        },
+        {
+            title: 'Parse portlet list',
+            task: ctx => {
+                ctx.portlets = JSON.parse(ctx.portlets.toString());
+            }
+        }
+    ]);
 
+    getPortletsTask.run()
+        .then(async ctx => {
+            await ctx.browser.close();
+        })
+        .catch(err => {
+            console.error(err);
+        });
 }
