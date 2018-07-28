@@ -1,0 +1,14 @@
+{
+  "name": "uportal-auto-screenshot",
+  "version": "1.0.0",
+  "description": "Automatically screenshot every portlet in you uPortal instance",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "uPortal"
+  ],
+  "author": "Ben Sheffield",
+  "license": "ISC"
+}
