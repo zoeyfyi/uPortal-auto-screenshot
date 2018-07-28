@@ -1,0 +1,10 @@
+#!/usr/bin/env node
+
+const [, , url, username, password] = process.argv;
+if (url === undefined ||
+    username === undefined ||
+    password === undefined) {
+    console.log("uportal-auto-screenshot [url] [username] [password]");
+} else {
+
+}
