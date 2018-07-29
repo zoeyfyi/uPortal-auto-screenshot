@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Automatically screenshot every portlet in your uPortal instance",
   "main": "index.js",
+  "bin": {
+    "uportal-auto-screenshot": "uportal-auto-screenshot.js"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
