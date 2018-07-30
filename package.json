@@ -10,7 +10,7 @@
     "uPortal"
   ],
   "author": "Ben Sheffield",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "dependencies": {
     "listr": "^0.14.1",
     "puppeteer": "^1.6.1"
