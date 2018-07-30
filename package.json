@@ -15,6 +15,7 @@
   "author": "Ben Sheffield",
   "license": "Apache-2.0",
   "dependencies": {
+    "args": "^5.0.0",
     "listr": "^0.14.1",
     "puppeteer": "^1.6.1"
   }
