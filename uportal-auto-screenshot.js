@@ -106,7 +106,8 @@ args
                 .map(portlet => {
                     return {
                         title: `Capture ${portlet.title}`,
-                        task: () => catureScreenshotTasks(url, portlet)
+                        task: () => catureScreenshotTasks(url, portlet),
+                        skip: () => fs.existsSync(`screenshots/${portlet.title}.png`),
                     };
                 }), {
                     concurrent: 2,
