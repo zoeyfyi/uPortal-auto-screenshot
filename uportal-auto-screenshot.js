@@ -94,11 +94,12 @@ args
     .command('capture', 'Capture screenshots of portlets', async (name, sub, options) => {
         const { url, username, password } = options;
 
-        console.log(`Log in to ${url} with username: '${username}' and password: '${password}'`);
+        console.log(`Log in to ${url} with username: '${username}' and password: '${password}'\n`);
         await loginTask(url, username, password).run();
-        console.log(`Fetch list of portlets`)
+        
+        console.log(`\nFetch list of portlets\n`)
         let ctx = await getPortletsTask(url).run();
-        console.log(`${ctx.portlets.portlets.length} portlets found`);
+        console.log(`\n${ctx.portlets.portlets.length} portlets found\n`);
 
         try {
             await new Listr(ctx.portlets.portlets
