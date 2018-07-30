@@ -107,7 +107,7 @@ args
                     return {
                         title: `Capture ${portlet.title}`,
                         task: () => catureScreenshotTasks(url, portlet),
-                        skip: () => fs.existsSync(`screenshots/${portlet.title}.png`),
+                        skip: () => fs.existsSync(`screenshots/${portlet.title}.png`) ? !options.overwrite : false,
                     };
                 }), {
                     concurrent: 2,
@@ -122,4 +122,5 @@ args
     .option("url", "URL of uPortal instance", "http://localhost:8080")
     .option("username", "Username of local uPortal user", "admin")
     .option("password", "Password of local uPortal user", "admin")
+    .option("overwrite", "Overwrites existing screenshots", false)
     .parse(process.argv);
