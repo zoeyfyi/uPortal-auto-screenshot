@@ -4,31 +4,34 @@ const Listr = require('listr');
 const puppeteer = require('puppeteer');
 const fs = require("fs");
 
+const [, , url, username, password] = process.argv;
 let browser;
 
-const [, , url, username, password] = process.argv;
 if (url === undefined ||
     username === undefined ||
     password === undefined) {
     console.log("uportal-auto-screenshot [url] [username] [password]");
 } else {
-    const getPortletsTask = new Listr([
+    const loginTask = new Listr([
         {
             title: 'Open browser',
-            task: async ctx => {
+            task: async () => {
                 browser = await puppeteer.launch();
             }
         },
         {
             title: `Login as ${username}`,
-            task: async ctx => {
+            task: async () => {
                 const page = await browser.newPage();
                 const target = `${url}/uPortal/Login?username=${username}&password=${password}`;
                 console.log(target)
                 await page.goto(target, { waitUntil: 'networkidle2' });
                 await page.close();
             }
-        },
+        }
+    ]);
+
+    const getPortletsTask = new Listr([
         {
             title: 'Fetch list of portlets',
             task: async ctx => {
@@ -52,33 +55,17 @@ if (url === undefined ||
     const catureScreenshotTasks = portlet => {
         return new Listr([
             {
-                title: 'Open browser',
-                task: async ctx => {
-                    ctx[portlet.id] = {}
-                    ctx[portlet.id].browser = await puppeteer.launch();
-                }
-            },
-            {
-                title: `Login as ${username}`,
-                task: async ctx => {
-                    const page = await ctx[portlet.id].browser.newPage();
-                    const target = `${url}/uPortal/Login?username=${username}&password=${password}`;
-                    console.log(target)
-                    await page.goto(target, { waitUntil: 'networkidle2' });
-                    await page.close();
-                }
-            },
-            {
                 title: 'Open portlet',
                 task: async ctx => {
-                    ctx[portlet.id].page = await ctx[portlet.id].browser.newPage();
-                    await ctx[portlet.id].page.goto(`${url}${portlet.renderUrl}`, { waitUntil: 'networkidle2' });
+                    ctx[portlet.title] = {};
+                    ctx[portlet.title].page = await browser.newPage();
+                    await ctx[portlet.title].page.goto(`${url}${portlet.renderUrl}`, { waitUntil: 'networkidle2' });
                 }
             },
             {
                 title: 'Get bounding rect',
                 task: async ctx => {
-                    ctx[portlet.id].rect = await ctx[portlet.id].page.evaluate(selector => {
+                    ctx[portlet.title].rect = await ctx[portlet.title].page.evaluate(selector => {
                         const element = document.querySelector(selector);
                         const { x, y, width, height } = element.getBoundingClientRect();
                         return { left: x, top: y, width, height, id: element.id };
@@ -88,41 +75,48 @@ if (url === undefined ||
             {
                 title: 'Screenshot element',
                 task: async ctx => {
-                    await ctx[portlet.id].page.screenshot({
+                    await ctx[portlet.title].page.screenshot({
                         path: `screenshots/${portlet.title}.png`,
                         clip: {
-                            x: ctx[portlet.id].rect.left,
-                            y: ctx[portlet.id].rect.top,
-                            width: ctx[portlet.id].rect.width,
-                            height: ctx[portlet.id].rect.height
+                            x: ctx[portlet.title].rect.left,
+                            y: ctx[portlet.title].rect.top,
+                            width: ctx[portlet.title].rect.width,
+                            height: ctx[portlet.title].rect.height
                         }
                     });
+                }
+            },
+            {
+                title: 'Close page',
+                task: async ctx => {
+                    await ctx[portlet.title].page.close();
                 }
             }
         ]);
     }
 
-    getPortletsTask.run()
-        .then(async ctx => {
-            const captureAllTasks = new Listr(ctx.portlets.portlets
+    (async () => {
+        console.log(`Log in to ${url} with username: '${username}' and password: '${password}'`);
+        await loginTask.run();
+        console.log(`Fetch list of portlets`)
+        let ctx = await getPortletsTask.run();
+        console.log(`${ctx.portlets.portlets.length} portlets found`);
+
+        try {
+            await new Listr(ctx.portlets.portlets
                 .map(portlet => {
                     return {
                         title: `Capture ${portlet.title}`,
                         task: () => catureScreenshotTasks(portlet)
                     };
                 }), {
-                    concurrent: 4,
+                    concurrent: 2,
                     exitOnError: false,
-                });
-            await browser.close();
-
-            captureAllTasks.run().then(async ctx => {
-                await browser.close();
-            }).catch(err => {
-                console.error(err);
-            });
-        })
-        .catch(err => {
+                }).run();
+        } catch (err) {
             console.error(err);
-        });
+        }
+
+        await browser.close();
+    })();
 }
