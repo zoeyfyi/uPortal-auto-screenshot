@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
-const Listr = require('listr');
 const puppeteer = require('puppeteer');
-var args = require('args');
+const args = require('args');
 const fs = require("fs");
 const rl = require("readline");
+const ProgressBar = require('progress');
+require('colors');
 
 let browser;
 
@@ -23,128 +24,127 @@ const prompt = question => {
     })
 };
 
-const loginTask = (auth, url, username, password) => new Listr([
-    {
-        title: 'Open browser',
-        task: async () => {
-            let options = {};
-            if (auth === "manual") {
-                options.headless = false;
-            }
-            browser = await puppeteer.launch(options);
-        }
-    },
-    {
-        title: `Login`,
-        task: async (ctx, task) => {
-            const page = await browser.newPage();
-
-            if (auth === "local") {
-                const target = `${url}/uPortal/Login?username=${username}&password=${password}`;
-                await page.goto(target, { waitUntil: 'networkidle2' });
-                await page.close();
-            } else if (auth === "manual") {
-                const target = `${url}/uPortal`;
-                await page.goto(target, { waitUntil: 'networkidle2' });
-
-                const r = rl.createInterface({
-                    input: process.stdin,
-                    output: process.stdout
-                });
-                task.title = "Press <enter> when logged in";
-                const answer = await prompt(task.title);
-                r.close();
-            } else {
-                throw new Error(`Unrecognized authentication option '${auth}', valid options are: local|manual`)
-            }
-        }
+const loginTask = async (auth, url, username, password) => {
+    // Open browser
+    let options = {};
+    if (auth === "manual") {
+        options.headless = false;
     }
-]);
+    browser = await puppeteer.launch(options);
 
-const getPortletsTask = (url) => new Listr([
-    {
-        title: 'Fetch list of portlets',
-        task: async ctx => {
-            const page = await browser.newPage();
-            const target = `${url}/uPortal/api/marketplace/entries.json`;
-            await page.goto(target, { waitUntil: 'networkidle2' });
-            const content = await page.content();
-            ctx.portlets = await page.evaluate(() => {
-                return JSON.parse(document.querySelector("body").innerText);
-            })
-            await page.close();
-        }
-    },
-]);
+    // Login
+    const page = await browser.newPage();
+    if (auth === "local") {
+        const target = `${url}/uPortal/Login?username=${username}&password=${password}`;
+        await page.goto(target, { waitUntil: 'networkidle2' });
+        await page.close();
+    } else if (auth === "manual") {
+        const target = `${url}/uPortal`;
+        await page.goto(target, { waitUntil: 'networkidle2' });
 
-const catureScreenshotTasks = (url, portlet) => {
-    return new Listr([
-        {
-            title: 'Open portlet',
-            task: async ctx => {
-                ctx[portlet.title] = {};
-                ctx[portlet.title].page = await browser.newPage();
-                await ctx[portlet.title].page.goto(`${url}${portlet.renderUrl}`, { waitUntil: 'networkidle2' });
-            }
-        },
-        {
-            title: 'Get bounding rect',
-            task: async ctx => {
-                ctx[portlet.title].rect = await ctx[portlet.title].page.evaluate(selector => {
-                    const element = document.querySelector(selector);
-                    const { x, y, width, height } = element.getBoundingClientRect();
-                    return { left: x, top: y, width, height, id: element.id };
-                }, '.up-portlet-wrapper-inner');
-            }
-        },
-        {
-            title: 'Screenshot element',
-            task: async ctx => {
-                await ctx[portlet.title].page.screenshot({
-                    path: `screenshots/${portlet.title}.png`,
-                    clip: {
-                        x: ctx[portlet.title].rect.left,
-                        y: ctx[portlet.title].rect.top,
-                        width: ctx[portlet.title].rect.width,
-                        height: ctx[portlet.title].rect.height
-                    }
-                });
-            }
-        },
-        {
-            title: 'Close page',
-            task: async ctx => {
-                await ctx[portlet.title].page.close();
-            }
-        }
-    ]);
+        const r = rl.createInterface({
+            input: process.stdin,
+            output: process.stdout
+        });
+        const answer = await prompt("Press <enter> after logging in");
+        r.close();
+    } else {
+        throw new Error(`Unrecognized authentication option '${auth}', valid options are: local|manual`)
+    }
 }
 
+const getPortletsTask = async (url) => {
+    const page = await browser.newPage();
+    const target = `${url}/uPortal/api/marketplace/entries.json`;
+    await page.goto(target, { waitUntil: 'networkidle2' });
+    
+    const content = await page.content();
+    const portlets = await page.evaluate(() => {
+        return JSON.parse(document.querySelector("body").innerText);
+    })
+    
+    await page.close();
+    
+    return portlets.portlets;
+}
+
+const catureScreenshotTasks = async (url, portlet) => {
+    // Open portlet
+    const page = await browser.newPage();
+    await page.goto(`${url}${portlet.renderUrl}`, { waitUntil: 'networkidle2' });
+    
+    // Get bounding rect
+    const rect = await page.evaluate(selector => {
+        const element = document.querySelector(selector);
+        const { x, y, width, height } = element.getBoundingClientRect();
+        return { left: x, top: y, width, height, id: element.id };
+    }, '.up-portlet-wrapper-inner');
+    
+    // Screenshot element
+    await page.screenshot({
+        path: `screenshots/${portlet.title}.png`,
+        clip: {
+            x: rect.left,
+            y: rect.top,
+            width: rect.width,
+            height: rect.height
+        }
+    });
+    
+    // Close page
+    await page.close();
+}
+    
 args
     .command('capture', 'Capture screenshots of portlets', async (name, sub, options) => {
-        const { auth, url, username, password, overwrite, concurrent } = options;
+        const { auth, url, username, password, overwrite } = options;
 
-        console.log(`Log in to ${url} with username: '${username}' and password: '${password}'\n`);
-        await loginTask(auth, url, username, password).run();
+        console.log('Logging in');
+        await loginTask(auth, url, username, password);
+        console.log(`Logged in as '${username}'`);
 
-        console.log(`\nFetch list of portlets\n`)
-        let ctx = await getPortletsTask(url).run();
-        console.log(`\n${ctx.portlets.portlets.length} portlets found\n`);
+        console.log(`Fetching list of portlets`);
+        let portlets = await getPortletsTask(url);
+        const portletCount = portlets.length;
+        console.log(`Found ${portletCount} portlets`);
 
-        try {
-            await new Listr(ctx.portlets.portlets
-                .map(portlet => {
-                    return {
-                        title: `Capture ${portlet.title}`,
-                        task: () => catureScreenshotTasks(url, portlet),
-                        skip: () => fs.existsSync(`screenshots/${portlet.title}.png`) ? !overwrite : false,
-                    };
-                }), {
-                    concurrent: auth === "manual" ? 1 : concurrent,
-                    exitOnError: false,
-                }).run();
-        } catch (err) {
-            console.error(err);
+        if (!overwrite) {
+            portlets = portlets.filter(portlet => {
+                return !fs.existsSync(`screenshots/${portlet.title}.png`);
+            });
+
+            if (portlets.length !== portletCount) {
+                console.log(`Skipping ${portletCount - portlets.length}, to overwrite screenshots use --overwrite`);
+            }
+        }
+
+        const captureBar = new ProgressBar('capturing [:bar] :percent :etas', { 
+            total: portlets.length,
+            complete: '=',
+            incomplete: ' '
+        });
+
+        let failed = [];
+
+        for (let portlet of portlets) {
+            try {
+                await catureScreenshotTasks(url, portlet);
+                captureBar.interrupt(`captured '${portlet.title}'`.green);
+            } catch (err) {
+                failed.push({
+                    portlet,
+                    err,
+                })
+                captureBar.interrupt(`failed to capture '${portlet.title}'`.red);
+            }
+            captureBar.tick();
+        }
+
+        if (failed.length !== 0) {
+            console.error(`${failed.length} failures`);
+            for (let fail of failed) {
+                console.error(`Portlet '${fail.portlet.title}' failed.\n${fail.err}\n`);
+            }
         }
 
         await browser.close();
@@ -154,5 +154,4 @@ args
     .option("username", "Username of local uPortal user", "admin")
     .option("password", "Password of local uPortal user", "admin")
     .option("overwrite", "Overwrites existing screenshots", false)
-    .option("concurrent", "Number of pages capturing portlets, if some portlets are not captured correctly try setting this to 1. This is disabled when auth type is manual.", 1)
     .parse(process.argv);
