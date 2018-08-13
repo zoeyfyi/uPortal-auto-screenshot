@@ -43,7 +43,7 @@ const loginTask = (auth, url, username, password) => new Listr([
                 const target = `${url}/uPortal/Login?username=${username}&password=${password}`;
                 await page.goto(target, { waitUntil: 'networkidle2' });
                 await page.close();
-            } if (auth === "manual") {
+            } else if (auth === "manual") {
                 const target = `${url}/uPortal`;
                 await page.goto(target, { waitUntil: 'networkidle2' });
 
