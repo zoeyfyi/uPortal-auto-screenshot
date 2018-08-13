@@ -5,6 +5,9 @@ const args = require('args');
 const fs = require("fs");
 const rl = require("readline");
 const ProgressBar = require('progress');
+const { promisify } = require('util');
+const stat = promisify(fs.stat);
+const mkdir = promisify(fs.mkdir);
 require('colors');
 
 let browser;
@@ -77,7 +80,7 @@ const getPortletsTask = async (url) => {
     return portlets.portlets;
 }
 
-const catureScreenshotTasks = async (url, portlet) => {
+const catureScreenshotTasks = async (url, portlet, outDir) => {
     // Open portlet
     const page = await browser.newPage();
     await page.goto(`${url}${portlet.renderUrl}`, { waitUntil: 'networkidle2' });
@@ -91,7 +94,7 @@ const catureScreenshotTasks = async (url, portlet) => {
     
     // Screenshot element
     await page.screenshot({
-        path: `screenshots/${portlet.title}.png`,
+        path: `${outDir}/${portlet.title}.png`,
         clip: {
             x: rect.left,
             y: rect.top,
@@ -108,6 +111,12 @@ args
     .command('capture', 'Capture screenshots of portlets', async (name, sub, options) => {
         const { url, username, overwrite } = options;
 
+        try {
+            await stat(options.outDir);
+        } catch(err) {
+            await mkdir(options.outDir);
+        }
+
         console.log('Logging in');
         await loginTask(options);
         console.log(`Logged in as '${username}'`);
@@ -119,7 +128,7 @@ args
 
         if (!overwrite) {
             portlets = portlets.filter(portlet => {
-                return !fs.existsSync(`screenshots/${portlet.title}.png`);
+                return !fs.existsSync(`${options.outDir}/${portlet.title}.png`);
             });
 
             if (portlets.length !== portletCount) {
@@ -137,7 +146,7 @@ args
 
         for (let portlet of portlets) {
             try {
-                await catureScreenshotTasks(url, portlet);
+                await catureScreenshotTasks(url, portlet, options.outDir);
                 captureBar.interrupt(`captured '${portlet.title}'`.green);
             } catch (err) {
                 failed.push({
@@ -167,4 +176,5 @@ args
     .option("passwordSelector", "Selector for the password textbox (for cas authentication)", "#password")
     .option("submitSelector", "Selector for the submit button (for cas authentication)", "input[type='submit']")
     .option("overwrite", "Overwrites existing screenshots", false)
+    .option("outDir", "Directory to save screenshots too (created if it does not exist)", "screenshots")
     .parse(process.argv);
