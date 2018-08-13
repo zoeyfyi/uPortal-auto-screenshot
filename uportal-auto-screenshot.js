@@ -7,7 +7,7 @@ const fs = require("fs");
 
 let browser;
 
-const loginTask = (url, username, password) => new Listr([
+const loginTask = (auth, url, username, password) => new Listr([
     {
         title: 'Open browser',
         task: async () => {
@@ -17,11 +17,15 @@ const loginTask = (url, username, password) => new Listr([
     {
         title: `Login`,
         task: async () => {
-            const page = await browser.newPage();
-            const target = `${url}/uPortal/Login?username=${username}&password=${password}`;
-            console.log(target)
-            await page.goto(target, { waitUntil: 'networkidle2' });
-            await page.close();
+            if (auth === "local") {
+                const page = await browser.newPage();
+                const target = `${url}/uPortal/Login?username=${username}&password=${password}`;
+                console.log(target)
+                await page.goto(target, { waitUntil: 'networkidle2' });
+                await page.close();
+            } else {
+                throw new Error(`Unrecognized authentication option '${auth}', valid options are: local`)
+            }
         }
     }
 ]);
@@ -92,10 +96,10 @@ const catureScreenshotTasks = (url, portlet) => {
 
 args
     .command('capture', 'Capture screenshots of portlets', async (name, sub, options) => {
-        const { url, username, password } = options;
+        const { auth, url, username, password } = options;
 
         console.log(`Log in to ${url} with username: '${username}' and password: '${password}'\n`);
-        await loginTask(url, username, password).run();
+        await loginTask(auth, url, username, password).run();
         
         console.log(`\nFetch list of portlets\n`)
         let ctx = await getPortletsTask(url).run();
@@ -120,6 +124,7 @@ args
         await browser.close();
     }, [])
     .option("url", "URL of uPortal instance", "http://localhost:8080")
+    .option("auth", "Type of authentication: local", "local")
     .option("username", "Username of local uPortal user", "admin")
     .option("password", "Password of local uPortal user", "admin")
     .option("overwrite", "Overwrites existing screenshots", false)
