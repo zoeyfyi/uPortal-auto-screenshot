@@ -75,28 +75,6 @@ const getPortletsTask = (url) => new Listr([
             await page.close();
         }
     },
-    // {
-    //     title: 'Fetch list of portlets',
-    //     task: async ctx => {
-    //         const page = await browser.newPage();
-    //         page.on('response', async response => {
-    //             ctx.portlets = await response.buffer()
-    //         });
-    //         const target = `${url}/uPortal/api/marketplace/entries.json`;
-    //         await page.goto(target, { waitUntil: 'networkidle2' });
-    //         await page.close();
-    //     }
-    // },
-    // {
-    //     title: 'Parse portlet list',
-    //     task: ctx => {
-    //         try {
-    //             ctx.portlets = JSON.parse();
-    //         } catch(err) {
-    //             throw new Error("ctx.portlets : " + ctx.portlets.toString());
-    //         }
-    //     }
-    // }
 ]);
 
 const catureScreenshotTasks = (url, portlet) => {
@@ -144,7 +122,7 @@ const catureScreenshotTasks = (url, portlet) => {
 
 args
     .command('capture', 'Capture screenshots of portlets', async (name, sub, options) => {
-        const { auth, url, username, password } = options;
+        const { auth, url, username, password, overwrite, concurrent } = options;
 
         console.log(`Log in to ${url} with username: '${username}' and password: '${password}'\n`);
         await loginTask(auth, url, username, password).run();
@@ -159,10 +137,10 @@ args
                     return {
                         title: `Capture ${portlet.title}`,
                         task: () => catureScreenshotTasks(url, portlet),
-                        skip: () => fs.existsSync(`screenshots/${portlet.title}.png`) ? !options.overwrite : false,
+                        skip: () => fs.existsSync(`screenshots/${portlet.title}.png`) ? !overwrite : false,
                     };
                 }), {
-                    concurrent: 1,
+                    concurrent: auth === "manual" ? 1 : concurrent,
                     exitOnError: false,
                 }).run();
         } catch (err) {
@@ -176,4 +154,5 @@ args
     .option("username", "Username of local uPortal user", "admin")
     .option("password", "Password of local uPortal user", "admin")
     .option("overwrite", "Overwrites existing screenshots", false)
+    .option("concurrent", "Number of pages capturing portlets, if some portlets are not captured correctly try setting this to 1. This is disabled when auth type is manual.", 1)
     .parse(process.argv);
