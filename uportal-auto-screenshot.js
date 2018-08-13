@@ -24,22 +24,22 @@ const prompt = question => {
     })
 };
 
-const loginTask = async (auth, url, username, password) => {
+const loginTask = async (options) => {
     // Open browser
-    let options = {};
-    if (auth === "manual") {
-        options.headless = false;
+    let browserOptions = {};
+    if (options.auth === "manual") {
+        browserOptions.headless = false;
     }
-    browser = await puppeteer.launch(options);
+    browser = await puppeteer.launch(browserOptions);
 
     // Login
     const page = await browser.newPage();
-    if (auth === "local") {
-        const target = `${url}/uPortal/Login?username=${username}&password=${password}`;
+    if (options.auth === "local") {
+        const target = `${options.url}/uPortal/Login?username=${options.username}&password=${options.password}`;
         await page.goto(target, { waitUntil: 'networkidle2' });
         await page.close();
-    } else if (auth === "manual") {
-        const target = `${url}/uPortal`;
+    } else if (options.auth === "manual") {
+        const target = `${options.url}/uPortal`;
         await page.goto(target, { waitUntil: 'networkidle2' });
 
         const r = rl.createInterface({
@@ -48,8 +48,17 @@ const loginTask = async (auth, url, username, password) => {
         });
         const answer = await prompt("Press <enter> after logging in");
         r.close();
+    } else if (options.auth === "cas") {
+        // Go to cas
+        await page.goto(options.loginUrl, { waitUntil: 'networkidle2' });
+        await page.type(options.usernameSelector, options.username);
+        await page.type(options.passwordSelector, options.password);
+        await Promise.all([
+            page.waitForNavigation({ waitUntil: 'networkidle2' }),
+            page.click(options.submitSelector),
+        ]);
     } else {
-        throw new Error(`Unrecognized authentication option '${auth}', valid options are: local|manual`)
+        throw new Error(`Unrecognized authentication option '${options.auth}', valid options are: local|manual`)
     }
 }
 
@@ -97,10 +106,10 @@ const catureScreenshotTasks = async (url, portlet) => {
     
 args
     .command('capture', 'Capture screenshots of portlets', async (name, sub, options) => {
-        const { auth, url, username, password, overwrite } = options;
+        const { url, username, overwrite } = options;
 
         console.log('Logging in');
-        await loginTask(auth, url, username, password);
+        await loginTask(options);
         console.log(`Logged in as '${username}'`);
 
         console.log(`Fetching list of portlets`);
@@ -150,8 +159,12 @@ args
         await browser.close();
     }, [])
     .option("url", "URL of uPortal instance", "http://localhost:8080")
-    .option("auth", "Type of authentication: local|manual", "local")
+    .option("loginUrl", "URL of cas (for cas authentication)", "http://localhost:8080/cas/login?service=http://localhost:8080/uPortal/Login")
+    .option("auth", "Type of authentication: local|manual|cas", "local")
     .option("username", "Username of local uPortal user", "admin")
     .option("password", "Password of local uPortal user", "admin")
+    .option("usernameSelector", "Selector for the username textbox (for cas authentication)", "#username")
+    .option("passwordSelector", "Selector for the password textbox (for cas authentication)", "#password")
+    .option("submitSelector", "Selector for the submit button (for cas authentication)", "input[type='submit']")
     .option("overwrite", "Overwrites existing screenshots", false)
     .parse(process.argv);
